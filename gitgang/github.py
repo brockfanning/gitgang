@@ -7,8 +7,8 @@ import fnmatch
 import yaml
 import requests
 
-def members_only(github_org, github_repo, gangfile='gang.yml'):
-    """Make sure the latest commit is from a member of the gang.
+def members_only(github_org, github_repo, git_branch='master', gangfile='gang.yml'):
+    """Make sure the latest commits are from a member of the gang.
 
     Parameters
     ----------
@@ -16,8 +16,10 @@ def members_only(github_org, github_repo, gangfile='gang.yml'):
         The GitHub organization
     github_repo - string
         The GitHub repository
+    git_branch - string
+        The default branch to judge changes against. Default: 'master'
     gangfile - string
-        Path to a YAML file with the list of gang members
+        Path to a YAML file with the list of gang members. Default: 'gang.yml'
     """
 
     # Get the list of members.
@@ -29,7 +31,7 @@ def members_only(github_org, github_repo, gangfile='gang.yml'):
             sys.exit(1)
 
     # Get the files changed in the commits.
-    cmd = ['git', 'diff-tree', '--name-only', '-r', 'HEAD']
+    cmd = ['git', 'diff-tree', '--name-only', '-r', 'HEAD', git_branch]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 
     # Loop through the lines of output that the above Git command produced.
