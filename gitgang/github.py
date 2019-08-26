@@ -30,6 +30,27 @@ def members_only(github_org, github_repo, git_branch='master', gangfile='gang.ym
             print(e)
             sys.exit(1)
 
+    # Get the SHA of the latest commit, which we'll use to get the user.
+    cmd = ['git', 'rev-parse', 'HEAD']
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    sha = proc.stdout.readlines().pop(0).decode('utf-8').strip()
+    github_api_request = "https://api.github.com/repos/%s/%s/commits/%s" \
+        % (github_org, github_repo, sha)
+    try:
+        response = requests.get(github_api_request).json()
+    except requests.exceptions.RequestException as e:
+        print(e)
+        sys.exit(1)
+
+    # Exit now if the author is an administrator.
+    user = response['author']['login']
+    if user in users and 'administrator' == users[user]:
+        sys.exit(0)
+
+    # Exit now if the author is not listed.
+    if user not in users:
+        raise RuntimeError("User '%s' is not listed in %s." % (user, gangfile))
+
     # Get the files changed in the commits.
     cmd = ['git', 'diff-tree', '--name-only', '-r', 'HEAD', git_branch]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -37,31 +58,10 @@ def members_only(github_org, github_repo, git_branch='master', gangfile='gang.ym
     # Loop through the lines of output that the above Git command produced.
     for index, line in enumerate(proc.stdout.readlines()):
         change = line.decode('utf-8').strip()
-        if index == 0:
-            # The first line is the commit ID, which we use to get the Github user.
-            github_api_request = "https://api.github.com/repos/%s/%s/commits/%s" \
-                % (github_org, github_repo, change)
-            try:
-                response = requests.get(github_api_request).json()
-            except requests.exceptions.RequestException as e:
-                print(e)
-                sys.exit(1)
+        change_allowed = False
+        for allowed_path in users[user]:
+            if fnmatch.fnmatch(change, allowed_path):
+                change_allowed = True
 
-            # Exit now if the author is an administrator.
-            user = response['author']['login']
-            if user in users and 'administrator' == users[user]:
-                sys.exit(0)
-
-            # Exit now if the user is not listed.
-            if user not in users:
-                raise RuntimeError("User '%s' is not listed in %s." % (user, gangfile))
-
-        else:
-            # The rest of the lines of output are files that were changed.
-            change_allowed = False
-            for allowed_path in users[user]:
-                if fnmatch.fnmatch(change, allowed_path):
-                    change_allowed = True
-
-            if not change_allowed:
-                raise RuntimeError("Changed file '%s' not an allowed path for user '%s'." % (change, user))
+        if not change_allowed:
+            raise RuntimeError("Changed file '%s' not an allowed path for user '%s'." % (change, user))
